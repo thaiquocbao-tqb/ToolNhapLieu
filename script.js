@@ -130,6 +130,8 @@ function reportPage() {
         <div class="field hidden" id="duct-length-field"><label for="quote-length">Chiều dài đoạn (mm)</label><input id="quote-length" type="number" min="1" step="any" placeholder="Ví dụ: 1000"></div>
         <div class="field hidden" id="duct-config-field"><label for="quote-duct-config">Quy cách vật liệu</label><select id="quote-duct-config"></select></div>
         <div class="field hidden" id="duct-price-type-field"><label for="quote-duct-price-type">Cách tính giá</label><select id="quote-duct-price-type"></select></div>
+        <div class="field hidden" id="valve-frame-thickness-field"><label for="quote-valve-frame-thickness">Độ dày tôn khung</label><select id="quote-valve-frame-thickness"><option value="">Mặc định (theo nhóm kích cỡ)</option><option value="spec">Theo Spec GSC (DB25:DG36)</option><option value="0.6mm">0.6 mm</option><option value="0.8mm">0.8 mm</option><option value="1.0mm">1.0 mm</option><option value="1.2mm">1.2 mm</option><option value="1.4mm">1.4 mm</option><option value="1.5mm">1.5 mm</option></select></div>
+        <div class="field hidden" id="valve-blade-thickness-field"><label for="quote-valve-blade-thickness">Độ dày tôn lá</label><select id="quote-valve-blade-thickness"><option value="">Mặc định (theo nhóm kích cỡ)</option><option value="spec">Theo Spec GSC (DB25:DG36)</option><option value="0.6mm">0.6 mm</option><option value="0.8mm">0.8 mm</option><option value="1.0mm">1.0 mm</option><option value="1.2mm">1.2 mm</option><option value="1.4mm">1.4 mm</option><option value="1.5mm">1.5 mm</option></select></div>
         <div class="field"><label for="quote-spec">Quy cách / mã hiệu</label><input id="quote-spec" placeholder="Để trống nếu chưa có"></div>
         <div class="field"><label for="quote-unit">Đơn vị</label><input id="quote-unit" placeholder="Ví dụ: cái"></div>
         <div class="field"><label for="quote-quantity">Số lượng</label><input id="quote-quantity" type="number" min="1" step="1" required value="1"></div>
@@ -184,6 +186,10 @@ function bindReportEvents() {
   const ductPriceTypeSelect = document.querySelector("#quote-duct-price-type");
   const slotCountField = document.querySelector("#slot-count-field");
   const slotCountSelect = document.querySelector("#quote-slot-count");
+  const valveFrameThicknessField = document.querySelector("#valve-frame-thickness-field");
+  const valveFrameThicknessSelect = document.querySelector("#quote-valve-frame-thickness");
+  const valveBladeThicknessField = document.querySelector("#valve-blade-thickness-field");
+  const valveBladeThicknessSelect = document.querySelector("#quote-valve-blade-thickness");
   const updateSubcategoryOptions = () => {
     const vgType = quoteProductTypes.find(type => type.category === "VanGio");
     if (vgType && window.VanGioCalculator?.sanPham?.length) {
@@ -210,7 +216,16 @@ function bindReportEvents() {
     productSelect.innerHTML = selectedSubtype.products.map(product => `<option value="${escapeHtml(product.code)}">${escapeHtml(product.name)}</option>`).join("");
     updateDuctOptions();
     updateSlotOptions();
+    updateValveThicknessOptions();
     updateCalculatedPrice();
+  };
+  const updateValveThicknessOptions = () => {
+    const isVanGio = category.value === "VanGio";
+    const selectedType = quoteProductTypes.find(type => type.category === category.value) || quoteProductTypes[0];
+    const selectedSubtype = selectedType?.subtypes.find(item => item.name === subcategory.value) || selectedType?.subtypes[0];
+    const hasThickness = isVanGio && (selectedSubtype?.shape === "tron" || selectedSubtype?.shape === "vuong");
+    valveFrameThicknessField.classList.toggle("hidden", !hasThickness);
+    valveBladeThicknessField.classList.toggle("hidden", !hasThickness);
   };
   const updateSlotOptions = () => {
     const isSlot = category.value === "Miệng gió" && productSelect.value === "GSC-LSG";
@@ -326,7 +341,11 @@ function bindReportEvents() {
 
     const dimensions = parseDimensions(sizeInput.value, roundValve ? "tron" : "vuong");
     if (!dimensions) { priceInput.value = ""; return; }
-    const options = isSlot ? { soSlot: slotCountSelect.value } : null;
+    const doDayKhung = (isVanGio && (isVanVuong || roundValve) && valveFrameThicknessSelect.value) ? valveFrameThicknessSelect.value : undefined;
+    const doDayLa = (isVanGio && (isVanVuong || roundValve) && valveBladeThicknessSelect.value) ? valveBladeThicknessSelect.value : undefined;
+    const options = isSlot
+      ? { soSlot: slotCountSelect.value }
+      : (isVanGio ? { doDayKhung, doDayLa } : null);
     const price = calculateProductUnitPrice(category.value, product, dimensions.a, dimensions.b, options);
     if (price == null) {
       priceInput.value = "";
@@ -348,11 +367,14 @@ function bindReportEvents() {
   ductConfigSelect.addEventListener("change", updateCalculatedPrice);
   ductPriceTypeSelect.addEventListener("change", updateCalculatedPrice);
   slotCountSelect.addEventListener("change", updateCalculatedPrice);
+  valveFrameThicknessSelect.addEventListener("change", updateCalculatedPrice);
+  valveBladeThicknessSelect.addEventListener("change", updateCalculatedPrice);
   sizeInput.addEventListener("input", updateCalculatedPrice);
   lengthInput.addEventListener("input", updateCalculatedPrice);
   productSelect.addEventListener("change", () => {
     updateDuctOptions();
     updateSlotOptions();
+    updateValveThicknessOptions();
     updateCalculatedPrice();
   });
   document.querySelector("#report-entry-form").addEventListener("submit", event => {
@@ -376,9 +398,11 @@ function bindReportEvents() {
     const allConfigs = isDuct ? getDuctConfigs(product.code) : [];
     const ductConfig = isDuct ? (allConfigs[configIndex] || allConfigs[0] || null) : null;
     const soSlotVal = isSlot ? slotCountSelect.value : null;
+    const doDayKhung = (isVanGio && (isVanVuong || roundValve) && valveFrameThicknessSelect.value) ? valveFrameThicknessSelect.value : undefined;
+    const doDayLa = (isVanGio && (isVanVuong || roundValve) && valveBladeThicknessSelect.value) ? valveBladeThicknessSelect.value : undefined;
     const ductOptions = isDuct
       ? (ductConfig ? { ...ductConfig.values, loaiGia: ductPriceTypeSelect.value } : null)
-      : (isSlot ? { soSlot: soSlotVal } : null);
+      : (isSlot ? { soSlot: soSlotVal } : (isVanGio ? { doDayKhung, doDayLa } : null));
     const ductArea = isDuct ? calculateDuctSurfaceArea(dimensions.a, dimensions.b, ductLength) : null;
     const unitPrice = calculateProductUnitPrice(category.value, product, dimensions.a, dimensions.b, ductOptions, ductArea);
     if (unitPrice == null) {
@@ -396,6 +420,19 @@ function bindReportEvents() {
     } else {
       sizeText = `${dimensions.a} x ${dimensions.b} mm`;
     }
+    let thicknessText = "";
+    if (isVanGio && (roundValve || isVanVuong)) {
+      const parts = [];
+      if (valveFrameThicknessSelect.value) {
+        parts.push(`Khung ${valveFrameThicknessSelect.value === "spec" ? "Spec GSC" : valveFrameThicknessSelect.value}`);
+      }
+      if (valveBladeThicknessSelect.value) {
+        parts.push(`Lá ${valveBladeThicknessSelect.value === "spec" ? "Spec GSC" : valveBladeThicknessSelect.value}`);
+      }
+      if (parts.length) {
+        thicknessText = parts.join(" · ");
+      }
+    }
     const slotText = isSlot && soSlotVal && soSlotVal !== "auto" ? `${soSlotVal} slot` : "";
     reportRows.push({
       category: type.category,
@@ -403,7 +440,7 @@ function bindReportEvents() {
       code: product.code,
       name: product.name,
       brand: document.querySelector("#quote-brand").value.trim(),
-      spec: [sizeText, slotText, ductConfig?.label, isDuct ? ductPriceTypeSelect.selectedOptions[0]?.textContent : "", document.querySelector("#quote-spec").value.trim(), product.code].filter(Boolean).join(" / "),
+      spec: [sizeText, thicknessText, slotText, ductConfig?.label, isDuct ? ductPriceTypeSelect.selectedOptions[0]?.textContent : "", document.querySelector("#quote-spec").value.trim(), product.code].filter(Boolean).join(" / "),
       unit: document.querySelector("#quote-unit").value.trim(),
       quantity,
       unitPrice,
@@ -415,6 +452,8 @@ function bindReportEvents() {
     document.querySelector("#report-line-count").textContent = `${reportRows.length} dòng`;
     document.querySelector("#export-report").disabled = false;
     ["#quote-brand", "#quote-size", "#quote-length", "#quote-spec", "#quote-unit", "#quote-price", "#quote-material", "#quote-note"].forEach(selector => { document.querySelector(selector).value = ""; });
+    valveFrameThicknessSelect.value = "";
+    valveBladeThicknessSelect.value = "";
     document.querySelector("#quote-quantity").value = "1";
     if (isDuct || isVanGio || isMiengGio) unitInput.value = "cái";
     document.querySelector("#quote-spec").focus();
@@ -506,7 +545,9 @@ function calculateProductUnitPrice(category, product, a, b, options = null, area
   if (category === "VanGio") {
     if (typeof window.VanGioCalculator?.tínhGiá !== "function") return null;
     try {
-      const total = window.VanGioCalculator.tínhGiá(a, b, product.code, 1);
+      const doDayKhung = options?.doDayKhung || undefined;
+      const doDayLa = options?.doDayLa || undefined;
+      const total = window.VanGioCalculator.tínhGiá(a, b, product.code, 1, doDayKhung, doDayLa);
       return Number.isFinite(total) && total > 0 ? total : null;
     } catch (error) {
       console.warn(`Lỗi tính giá ${product.code}:`, error.message);
