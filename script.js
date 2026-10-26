@@ -6,6 +6,14 @@ let parsedRows = [];
 let reportRows = [];
 let toastTimer;
 
+const defaultOngGioProducts = [
+  { maLoai: "DUCT G.I", tenLoai: "Ống gió tôn mạ kẽm (G.I)", maSanPham: "OG-GI" },
+  { maLoai: "DUCT G.I", tenLoai: "Ống gió tiêu âm Rockwool + tôn soi lỗ", maSanPham: "OG-TA" },
+  { maLoai: "DUCT E.I", tenLoai: "Ống gió chống cháy EI (bọc tấm MgO)", maSanPham: "OG-EI" },
+  { maLoai: "DUCT S.U.S", tenLoai: "Ống gió Inox 304 bóng BA", maSanPham: "OG-SUS" },
+];
+const ongGioProducts = (window.OngGioCalculator?.sanPham?.length ? window.OngGioCalculator.sanPham : defaultOngGioProducts);
+
 const quoteProductTypes = [
   { category: "Miệng gió", subtypes: [{ name: "PRICE-GSC", products: [
     { code: "GSC-SDG", name: "Miệng gió 1 lớp" },
@@ -28,16 +36,30 @@ const quoteProductTypes = [
   },
   {
     category: "Ống gió",
-    subtypes: [...new Set((window.OngGioCalculator?.sanPham || []).map(product => product.maLoai))].map(name => ({
+    subtypes: [...new Set(ongGioProducts.map(product => product.maLoai))].map(name => ({
       name,
-      products: (window.OngGioCalculator?.sanPham || [])
+      products: ongGioProducts
         .filter(product => product.maLoai === name)
         .map(product => ({ code: product.maSanPham, name: product.tenLoai, shape: "duct" })),
     })),
   },
 ];
 
-const vanGioProducts = window.VanGioCalculator?.sanPham || [];
+const defaultVanGioProducts = [
+  { maLoai: "PRICE-GSC-TRON", hinhDang: "tron", tenLoai: "VAN ĐIỀU CHỈNH LƯU LƯỢNG VCD TRÒN TAY GẠT", maSanPham: "GSC - RVCD" },
+  { maLoai: "PRICE-GSC-TRON", hinhDang: "tron", tenLoai: "VAN GIÓ 1 CHIỀU NRD TRÒN", maSanPham: "GSC - NRD-R" },
+  { maLoai: "PRICE-GSC-TRON", hinhDang: "tron", tenLoai: "VAN FD TRÒN - SỬ DỤNG CẦU CHÌ ( KHÔNG ĐẠT EI )", maSanPham: "GSC - FD - R" },
+  { maLoai: "PRICE-GSC-TRON", hinhDang: "tron", tenLoai: "VAN MFD/MFSD TRÒN - ( KHÔNG ĐẠT EI , CHƯA GỒM ĐỘNG CƠ )", maSanPham: "GSC - MFD&MFSD - R" },
+  { maLoai: "PRICE-GSC", hinhDang: "vuong", tenLoai: "VAN ĐIỀU CHỈNH LƯU LƯỢNG VCD VUÔNG", maSanPham: "GSC - SVCD" },
+  { maLoai: "PRICE-GSC", hinhDang: "vuong", tenLoai: "VAN GIÓ 1 CHIỀU NRD VUÔNG", maSanPham: "GSC - NRD - S" },
+  { maLoai: "PRICE-GSC", hinhDang: "vuong", tenLoai: "VAN XẢ ÁP PRD VUÔNG", maSanPham: "GSC - PRD" },
+  { maLoai: "PRICE-GSC", hinhDang: "vuong", tenLoai: "VAN FD VUÔNG - SỬ DỤNG CẦU CHÌ ( KHÔNG ĐẠT EI )", maSanPham: "GSC - FD" },
+  { maLoai: "PRICE-GSC", hinhDang: "vuong", tenLoai: "VAN MFD/MFSD VUÔNG - ( KHÔNG ĐẠT EI , CHƯA GỒM ĐỘNG CƠ )", maSanPham: "GSC - MFD&MFSD" },
+  { maLoai: "FD.MFD.EI", hinhDang: "ei", tenLoai: "VAN CHỐNG CHÁY FIRE DAMPER CHUẨN EI120", maSanPham: "GSC - MFD/Ei120" },
+  { maLoai: "FD.MFD.EI", hinhDang: "ei", tenLoai: "VAN CHỐNG CHÁY FIRE DAMPER CHUẨN EI60", maSanPham: "GSC - MFD/Ei60" },
+  { maLoai: "FD.MFD.EI", hinhDang: "ei", tenLoai: "VAN CHỐNG CHÁY FD & MFD CHUẨN EI (chọn EI60 / EI120)", maSanPham: "GSC - FD&MFD/Ei" }
+];
+const vanGioProducts = (window.VanGioCalculator?.sanPham?.length ? window.VanGioCalculator.sanPham : defaultVanGioProducts);
 for (const subtype of quoteProductTypes.find(type => type.category === "VanGio").subtypes) {
   subtype.products = vanGioProducts
     .filter(product => product.hinhDang === subtype.shape)
@@ -163,8 +185,22 @@ function bindReportEvents() {
   const slotCountField = document.querySelector("#slot-count-field");
   const slotCountSelect = document.querySelector("#quote-slot-count");
   const updateSubcategoryOptions = () => {
-    const selectedType = quoteProductTypes.find(type => type.category === category.value);
+    const vgType = quoteProductTypes.find(type => type.category === "VanGio");
+    if (vgType && window.VanGioCalculator?.sanPham?.length) {
+      for (const subtype of vgType.subtypes) {
+        if (!subtype.products || !subtype.products.length) {
+          subtype.products = window.VanGioCalculator.sanPham
+            .filter(product => product.hinhDang === subtype.shape)
+            .map(product => ({ code: product.maSanPham, name: product.tenLoai, shape: subtype.shape }));
+        }
+      }
+    }
+    const selectedType = quoteProductTypes.find(type => type.category === category.value) || quoteProductTypes[0];
+    if (!selectedType || !selectedType.subtypes) return;
     subcategory.innerHTML = selectedType.subtypes.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join("");
+    if ((category.value === "VanGio" || category.value === "Miệng gió") && !unitInput.value) {
+      unitInput.value = "cái";
+    }
     updateProductOptions();
   };
   const updateProductOptions = () => {
@@ -179,7 +215,7 @@ function bindReportEvents() {
   const updateSlotOptions = () => {
     const isSlot = category.value === "Miệng gió" && productSelect.value === "GSC-LSG";
     slotCountField.classList.toggle("hidden", !isSlot);
-    if (category.value === "Miệng gió" && !unitInput.value) {
+    if ((category.value === "Miệng gió" || category.value === "VanGio") && !unitInput.value) {
       unitInput.value = "cái";
     }
   };
@@ -195,8 +231,12 @@ function bindReportEvents() {
     const quantityInput = document.querySelector("#quote-quantity");
     quantityInput.min = "1";
     quantityInput.step = "1";
-    if (isDuct) unitInput.value = "cái";
-    else if (unitInput.value === "cái") unitInput.value = "";
+    if (isDuct) {
+      if (!unitInput.value) unitInput.value = "cái";
+      if (!lengthInput.value) lengthInput.value = "1120";
+    } else if (category.value !== "VanGio" && category.value !== "Miệng gió" && unitInput.value === "cái") {
+      unitInput.value = "";
+    }
 
     if (!isDuct) return;
     const configs = getDuctConfigs(productSelect.value);
@@ -213,28 +253,58 @@ function bindReportEvents() {
     if (!product) return;
     const sizeLabel = document.querySelector('label[for="quote-size"]');
     const isDuct = category.value === "Ống gió";
+    const isVanGio = category.value === "VanGio";
     const isMiengGio = category.value === "Miệng gió";
     const isSlot = isMiengGio && product.code === "GSC-LSG";
     const isOBD = isMiengGio && product.code === "GSC-OBD";
     const isLinear = isMiengGio && product.code === "GSC-LBG";
+    const roundValve = isVanGio && product.shape === "tron";
+    const isVanVuong = isVanGio && product.shape === "vuong";
+    const isVanEI = isVanGio && product.shape === "ei";
 
     if (isDuct) {
-      document.querySelector('label[for="quote-size"]').textContent = "Kích cỡ W × H (mm)";
-      sizeInput.placeholder = "Ví dụ: 400 x 300";
-      const config = getDuctConfigs(product.code)[Number(ductConfigSelect.value) || 0];
+      sizeLabel.textContent = "Kích cỡ W × H (mm)";
+      sizeInput.placeholder = "Ví dụ: 400 x 300 hoặc 400 x 300 x 1120";
+      const configIndex = Number(ductConfigSelect.value);
+      const allConfigs = getDuctConfigs(product.code);
+      const config = allConfigs[configIndex] || allConfigs[0];
       const options = config ? { ...config.values, loaiGia: ductPriceTypeSelect.value } : null;
       const dimensions = parseDimensions(sizeInput.value);
-      const length = Number(lengthInput.value);
+      if (dimensions?.length && !lengthInput.value) {
+        lengthInput.value = String(dimensions.length);
+      }
+      const length = Number(lengthInput.value) || dimensions?.length || 0;
       const area = dimensions && length > 0 ? calculateDuctSurfaceArea(dimensions.a, dimensions.b, length) : null;
       const price = options && area ? calculateProductUnitPrice(category.value, product, dimensions.a, dimensions.b, options, area) : null;
-      priceInput.placeholder = "Giá cho 1 đoạn ống";
-      priceInput.value = price == null ? "" : String(price);
+      if (price == null) {
+        priceInput.value = "";
+        if (options?.loaiGia === "thamKhao" && (options.doDay === 1.5 || (options.zinc !== "Z80" && options.zinc !== "Z275"))) {
+          priceInput.placeholder = "Giá tham khảo chỉ áp dụng cho Z80 (trừ 1.5) & Z275";
+        } else if (!dimensions) {
+          priceInput.placeholder = "Nhập kích cỡ W × H để tính";
+        } else if (!(length > 0)) {
+          priceInput.placeholder = "Nhập chiều dài đoạn (mm) để tính";
+        } else {
+          priceInput.placeholder = "Chưa tính được giá (kiểm tra quy cách)";
+        }
+      } else {
+        priceInput.placeholder = "Giá cho 1 đoạn ống";
+        priceInput.value = String(Math.round(price));
+      }
       return;
     }
-    const roundValve = category.value === "VanGio" && product.shape === "tron";
+
     if (roundValve) {
-      sizeLabel.textContent = "Kích cỡ Ø (mm)";
-      sizeInput.placeholder = "Ví dụ: Ø300 hoặc 300 x 250";
+      sizeLabel.textContent = "Đường kính Ø (mm)";
+      sizeInput.placeholder = "Ví dụ: Ø300, D300 hoặc 300 x 250 (Ø x L)";
+      priceInput.placeholder = "Nhập kích cỡ để tính";
+    } else if (isVanVuong) {
+      sizeLabel.textContent = "Kích cỡ W × H (mm)";
+      sizeInput.placeholder = "Ví dụ: 400 x 300 hoặc 500 x 400";
+      priceInput.placeholder = "Nhập kích cỡ để tính";
+    } else if (isVanEI) {
+      sizeLabel.textContent = "Kích cỡ W × H (mm)";
+      sizeInput.placeholder = "Ví dụ: 500 x 400 hoặc 600 x 500";
       priceInput.placeholder = "Nhập kích cỡ để tính";
     } else if (isOBD) {
       sizeLabel.textContent = "Kích cỡ miệng KTM (mm)";
@@ -253,6 +323,7 @@ function bindReportEvents() {
       sizeInput.placeholder = "Ví dụ: 300 x 200";
       priceInput.placeholder = "Nhập kích cỡ để tính";
     }
+
     const dimensions = parseDimensions(sizeInput.value, roundValve ? "tron" : "vuong");
     if (!dimensions) { priceInput.value = ""; return; }
     const options = isSlot ? { soSlot: slotCountSelect.value } : null;
@@ -261,8 +332,13 @@ function bindReportEvents() {
       priceInput.value = "";
       if (isOBD) {
         priceInput.placeholder = `Cỡ cổ (${dimensions.a - 50}x${dimensions.b - 50}) không có trong bảng OBD`;
+      } else if (isVanVuong) {
+        priceInput.placeholder = "Cỡ WxH không có trong bảng chuẩn van vuông (bước 50mm)";
+      } else {
+        priceInput.placeholder = "Chưa tính được giá (kiểm tra kích cỡ)";
       }
     } else {
+      priceInput.placeholder = "Nhập kích cỡ để tính";
       priceInput.value = String(price);
     }
   };
@@ -274,23 +350,31 @@ function bindReportEvents() {
   slotCountSelect.addEventListener("change", updateCalculatedPrice);
   sizeInput.addEventListener("input", updateCalculatedPrice);
   lengthInput.addEventListener("input", updateCalculatedPrice);
-  productSelect.addEventListener("change", updateCalculatedPrice);
+  productSelect.addEventListener("change", () => {
+    updateDuctOptions();
+    updateSlotOptions();
+    updateCalculatedPrice();
+  });
   document.querySelector("#report-entry-form").addEventListener("submit", event => {
     event.preventDefault();
     const type = quoteProductTypes.find(item => item.category === category.value);
     const subtype = type.subtypes.find(item => item.name === subcategory.value);
     const product = subtype.products.find(item => item.code === productSelect.value);
     const isDuct = category.value === "Ống gió";
+    const isVanGio = category.value === "VanGio";
     const isMiengGio = category.value === "Miệng gió";
     const isSlot = isMiengGio && product.code === "GSC-LSG";
     const isOBD = isMiengGio && product.code === "GSC-OBD";
-    const roundValve = category.value === "VanGio" && product.shape === "tron";
+    const roundValve = isVanGio && product.shape === "tron";
+    const isVanVuong = isVanGio && product.shape === "vuong";
     const dimensions = parseDimensions(sizeInput.value, roundValve ? "tron" : "vuong");
-    if (!dimensions) return showToast(roundValve ? "Nhập đường kính van, ví dụ Ø300, hoặc đường kính × chiều dài." : "Kích cỡ phải có dạng A x B, ví dụ 400 x 300.", true);
-    const ductLength = isDuct ? Number(lengthInput.value) : 0;
-    if (isDuct && !(ductLength > 0)) return showToast("Nhập chiều dài đoạn ống bằng mm, ví dụ 1000.", true);
+    if (!dimensions) return showToast(roundValve ? "Nhập đường kính van, ví dụ Ø300, D300 hoặc đường kính × chiều dài." : "Kích cỡ phải có dạng A x B, ví dụ 400 x 300.", true);
+    const ductLength = isDuct ? (Number(lengthInput.value) || dimensions.length || 0) : 0;
+    if (isDuct && !(ductLength > 0)) return showToast("Nhập chiều dài đoạn ống bằng mm, ví dụ 1120 hoặc 1000.", true);
     const quantity = Number(document.querySelector("#quote-quantity").value) || "";
-    const ductConfig = isDuct ? getDuctConfigs(product.code)[Number(ductConfigSelect.value) || 0] : null;
+    const configIndex = Number(ductConfigSelect.value);
+    const allConfigs = isDuct ? getDuctConfigs(product.code) : [];
+    const ductConfig = isDuct ? (allConfigs[configIndex] || allConfigs[0] || null) : null;
     const soSlotVal = isSlot ? slotCountSelect.value : null;
     const ductOptions = isDuct
       ? (ductConfig ? { ...ductConfig.values, loaiGia: ductPriceTypeSelect.value } : null)
@@ -299,13 +383,14 @@ function bindReportEvents() {
     const unitPrice = calculateProductUnitPrice(category.value, product, dimensions.a, dimensions.b, ductOptions, ductArea);
     if (unitPrice == null) {
       if (isOBD) return showToast(`Kích thước cổ (${dimensions.a - 50} x ${dimensions.b - 50} mm) không có trong bảng giá chuẩn OBD.`, true);
+      if (isVanVuong) return showToast(`Kích thước ${dimensions.a} x ${dimensions.b} mm không có trong bảng giá chuẩn van vuông (100–1050 bước 50, và 1500).`, true);
       return showToast(`Chưa tính được giá cho ${product.code}. Kiểm tra kích cỡ hoặc công thức sản phẩm.`, true);
     }
     let sizeText = "";
     if (isDuct) {
       sizeText = `${dimensions.a} x ${dimensions.b} x ${ductLength} mm (${ductArea.toFixed(3)} m²/đoạn)`;
-    } else if (roundValve && dimensions.b === 0) {
-      sizeText = `Ø${dimensions.a} mm`;
+    } else if (roundValve) {
+      sizeText = dimensions.b > 0 ? `Ø${dimensions.a} x ${dimensions.b} mm` : `Ø${dimensions.a} mm`;
     } else if (isOBD) {
       sizeText = `KTM ${dimensions.a} x ${dimensions.b} mm (KTC ${dimensions.a - 50} x ${dimensions.b - 50} mm)`;
     } else {
@@ -331,7 +416,7 @@ function bindReportEvents() {
     document.querySelector("#export-report").disabled = false;
     ["#quote-brand", "#quote-size", "#quote-length", "#quote-spec", "#quote-unit", "#quote-price", "#quote-material", "#quote-note"].forEach(selector => { document.querySelector(selector).value = ""; });
     document.querySelector("#quote-quantity").value = "1";
-    if (isDuct) unitInput.value = "cái";
+    if (isDuct || isVanGio || isMiengGio) unitInput.value = "cái";
     document.querySelector("#quote-spec").focus();
   });
   document.querySelector("#export-report").addEventListener("click", exportReport);
@@ -339,11 +424,18 @@ function bindReportEvents() {
 
 function parseDimensions(value, shape = "vuong") {
   if (shape === "tron") {
-    const roundMatch = String(value || "").trim().match(/^(?:Ø|ø)?\s*(\d+(?:[.,]\d+)?)\s*(?:mm)?(?:\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?)\s*(?:mm)?)?$/i);
+    const roundMatch = String(value || "").trim().match(/^(?:Ø|ø|[Dd])?\s*(\d+(?:[.,]\d+)?)\s*(?:mm)?(?:\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?)\s*(?:mm)?)?$/i);
     if (!roundMatch) return null;
     const a = Number(roundMatch[1].replace(",", "."));
     const b = roundMatch[2] ? Number(roundMatch[2].replace(",", ".")) : 0;
     return a > 0 && (b === 0 || b > 0) ? { a, b } : null;
+  }
+  const match3 = String(value || "").trim().match(/^(\d+(?:[.,]\d+)?)\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?)\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?)(?:\s*mm)?$/i);
+  if (match3) {
+    const a = Number(match3[1].replace(",", "."));
+    const b = Number(match3[2].replace(",", "."));
+    const length = Number(match3[3].replace(",", "."));
+    return a > 0 && b > 0 ? { a, b, length: length > 0 ? length : undefined } : null;
   }
   const match = String(value || "").trim().match(/^(\d+(?:[.,]\d+)?)\s*(?:x|×|\*)\s*(\d+(?:[.,]\d+)?)(?:\s*mm)?$/i);
   if (!match) return null;
@@ -400,7 +492,9 @@ function calculateDuctSurfaceArea(width, height, length) {
 function calculateProductUnitPrice(category, product, a, b, options = null, area = null) {
   if (category === "Ống gió") {
     if (typeof window.OngGioCalculator?.tínhGiá !== "function" || !options || !(area > 0)) return null;
-    if (product.code === "OG-GI" && options.loaiGia === "thamKhao" && options.doDay === 1.5) return null;
+    if (product.code === "OG-GI" && options.loaiGia === "thamKhao") {
+      if (options.doDay === 1.5 || (options.zinc !== "Z80" && options.zinc !== "Z275")) return null;
+    }
     try {
       const price = window.OngGioCalculator.tínhGiá(product.code, options, area);
       return Number.isFinite(price) && price >= 0 ? price : null;
@@ -415,7 +509,7 @@ function calculateProductUnitPrice(category, product, a, b, options = null, area
       const total = window.VanGioCalculator.tínhGiá(a, b, product.code, 1);
       return Number.isFinite(total) && total > 0 ? total : null;
     } catch (error) {
-      console.error(`Lỗi tính giá ${product.code}:`, error);
+      console.warn(`Lỗi tính giá ${product.code}:`, error.message);
       return null;
     }
   }

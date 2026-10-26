@@ -183,11 +183,12 @@ function giaOBDTheoKTC(c1, c2) {
 }
 
 // -------- Giá 1 sản phẩm theo sheet R02 (chưa nhân hệ số cân chỉnh 1.04) --------
-function giaR02(aIn, bIn, maSanPham, soSlot) {
+function giaR02(ac, bc, maSanPham, soSlot) {
+    const aIn = ac + 50;
+    const bIn = bc + 50;
     const Nh = Math.min(aIn, bIn);
     const L = Math.max(aIn, bIn);
-    const ac = aIn - 50;
-    const bc = bIn - 50;
+   
     const Lc = Math.max(ac, bc);
     const Nc = Math.min(ac, bc);
 

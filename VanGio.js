@@ -1,13 +1,17 @@
 // ====================================================================================
-// BẢNG GIÁ VAN GIÓ XUẤT XƯỞNG GSC — công thức tính giá từ file Excel
+// BẢNG GIÁ VAN GIÓ XUẤT XƯỞNG GSC — Công thức tính giá khớp 100% với file Excel gốc
 // Van: VCD, NRD, PRD, FD, MFD (tròn + vuông) và FD/MFD chuẩn EI60, EI120 (12 mã sản phẩm)
 //
-// Cách dùng:  tínhGiá(aIn, bIn, maSanPham, soLuong)
-//   - Van TRÒN  (…-R)  : aIn = đường kính Ø (mm); bIn = chiều dài van (mm, bỏ trống = theo bảng của sheet)
-//   - Van VUÔNG / EI   : aIn = chiều rộng W (mm, header cột); bIn = chiều cao H (mm, cột B của sheet)
-//   Ví dụ: tínhGiá(300, 0, "GSC - RVCD", 1)        // van VCD tròn Ø300
-//          tínhGiá(400, 500, "GSC - SVCD", 2)       // 2 van VCD vuông 400x500
-// Giá trả về là giá xuất xưởng (VNĐ) × số lượng.
+// Cách dùng cơ bản:
+//   tínhGiá(aIn, bIn, maSanPham, soLuong, tuyChon)
+//   - Van TRÒN  (…-R)  : aIn = đường kính Ø (mm); bIn = chiều dài van (mm, để 0 hoặc bỏ trống = theo bảng sheet)
+//   - Van VUÔNG / EI   : aIn = chiều rộng W (mm, dòng 3); bIn = chiều cao H (mm, cột B)
+//
+// Tùy chọn mở rộng (tuyChon - không bắt buộc):
+//   - theoBangMaTranEI    : (mặc định: true) Khớp 100% với các ô gõ nhầm tiêu đề trên bảng EI (B18=760, B33=1600, AF3=1500)
+//   - theoONhapLieuEI     : (mặc định: false) Nếu bật true, tính theo ô U38/U39 ở cuối sheet FD.MFD.EI (ROUNDUP 2 lần)
+//   - chuaNhanCanChinhTron: (mặc định: false) Nếu bật true, trả về cột K của 4 sheet ẩn van tròn (chưa nhân 1.1)
+//   - daoChieuRongCao     : (mặc định: false) Nếu bật true, cho phép truyền aIn = Cao (Hàng B), bIn = Rộng (Cột D)
 // ====================================================================================
 
 ;(function (global) {
@@ -21,14 +25,17 @@ const chiPhiCoBan = {
     chiPhiKhac : 1000000,
     thietBiSanXuat : 797270000 * 1.1  // tổng thiết bị 797.270.000 × 1.1 = 876.997.000
 };
+
 const chiPhiTongHop = {
     tienĐauTuMayMoc : chiPhiCoBan.thietBiSanXuat,
-    soTienQuanLyVaVanHanhXuong1Thang : chiPhiCoBan.tienMatBangNhaXuong + 0 + chiPhiCoBan.chiPhiNhanVien + chiPhiCoBan.dienNuoc + chiPhiCoBan.chiPhiKhac,
+    tienDauTuMayMoc : chiPhiCoBan.thietBiSanXuat, // alias không dấu tránh lỗi gõ phím
+    soTienQuanLyVaVanHanhXuong1Thang :
+        chiPhiCoBan.tienMatBangNhaXuong + 0 + chiPhiCoBan.chiPhiNhanVien + chiPhiCoBan.dienNuoc + chiPhiCoBan.chiPhiKhac,
     tongThuongThang13 : chiPhiCoBan.chiPhiThuongThang13,
     loiNhuanSanPham : 0.3,
     soThangHoiVonDauTuMayMoc : 60,
     heSoSale : 1.1 * 1.25 * 1.04 * 1.05 * 1.1,   // = 1.65165
-    heSoPhuVanTronNho : 1.05                      // K32: van tròn Ø <= 200 nhân thêm
+    heSoPhuVanTronNho : 1.05                      // K32: van tròn Ø <= 200 nhân thêm 1.05
 };
 
 // ------------------------------------------------------------------ Đơn giá vật tư
@@ -56,13 +63,13 @@ const giaTole = (doDay) => giaNL("Tole tấm 1200 x " + doDay) / 1.2;          /
 const giaTyCotVanMet = giaNL("Ty tròn rỗng Ø12.7 - cốt van") / 6;            // đ/m
 
 // ------------------------------------------------------------------ Bảng nhóm kích thước
-// Nhóm: <=400 | 400<a<=600 | 600<a<=800 | 800<a<=950 | >950
+// Nhóm: <=400 (0) | 400<a<=600 (1) | 600<a<=800 (2) | 800<a<=950 (3) | >950 (4)
 const nhomKichThuoc = (a) => (a <= 400 ? 0 : a <= 600 ? 1 : a <= 800 ? 2 : a <= 950 ? 3 : 4);
 
 // Van TRÒN (sheet "Price GSC - Tron")
 const doDayKhungTron = ["1.2mm", "1.2mm", "1.0mm", "1.0mm", "1.2mm"];
 const doDayLaTron    = ["1.2mm", "1.2mm", "1.0mm", "1.0mm", "1.2mm"];
-const doDayKhungTronGoTay = { 900 : "1.2mm", 950 : "1.2mm" };   // sheet gõ tay 1.2mm cho Ø900, Ø950
+const doDayKhungTronGoTay = { 900 : "1.2mm", 950 : "1.2mm" };   // F24, F25 trên Price GSC - Tron gõ cứng 1.2mm
 
 // Van VUÔNG (sheet "Price GSC": E28:I30)
 const kichThuocVuong = [100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1500];
@@ -70,7 +77,7 @@ const doDayKhungVuong = ["0.8mm", "0.8mm", "1.0mm", "1.0mm", "1.2mm"];
 const doDayLaVuong    = ["0.8mm", "0.8mm", "0.8mm", "1.0mm", "1.0mm"];
 const chieuDaiVanVuong = 200;
 
-// Hệ số điều chỉnh thu hồi vốn của van vuông (các ô AJ/AK/AI... trong sheet). Hàng = H, cột = W theo kichThuocVuong.
+// Hệ số điều chỉnh thu hồi vốn của van vuông (các ô ẩn AJ/AK/AI... trong sheet). Hàng = H (iH), Cột = W (iW).
 const bangHeSoThuHoiVuong = [
     [0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.55, 0.55, 0.55, 0.55, 0.75, 0.75, 0.75, 0.75, 1.2, 1.2, 1.2, 1.275, 1.275, 1.275],
     [0.35, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.5, 0.5, 0.5, 0.5, 0.7, 0.7, 0.7, 0.7, 1.175, 1.175, 1.175, 1.25, 1.25, 1.25],
@@ -92,9 +99,9 @@ const bangHeSoThuHoiVuong = [
     [1.2, 1.175, 1.15, 1.125, 1.1, 1.075, 1.05, 1.025, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.4, 0.4],
     [1.275, 1.25, 1.225, 1.2, 1.175, 1.15, 1.125, 1.1, 1.075, 1.05, 1.025, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.3],
     [1.275, 1.25, 1.225, 1.2, 1.175, 1.15, 1.125, 1.1, 1.075, 1.05, 1.025, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.2],
-    [1.275, 1.25, 1.225, 1.2, 1.175, 1.15, 1.125, 1.1, 1.075, 1.05, 1.025, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
+    [1.275, 1.25, 1.225, 1.2, 1.175, 1.15, 1.125, 1.1, 1.075, 1.05, 1.025, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
 ];
-// FD vuông: 6 ô trong sheet trỏ vào ô trống AV27 nên Excel coi = 0 (P20:P22, S23:S25)
+// FD vuông: 6 ô trong sheet Price FD - Vuong trỏ vào ô trống AV27 nên Excel tính = 0 (P20:P22, S23:S25)
 const bangHeSoThuHoiFD = bangHeSoThuHoiVuong.map((h) => h.slice());
 [[15, 11], [16, 11], [17, 11], [18, 14], [19, 14], [20, 14]].forEach(([h, w]) => { bangHeSoThuHoiFD[h][w] = 0; });
 
@@ -121,7 +128,7 @@ const sanPham = [
         maLoai: "PRICE-GSC-TRON", hinhDang: "tron",
         tenLoai: "VAN FD TRÒN - SỬ DỤNG CẦU CHÌ ( KHÔNG ĐẠT EI )", maSanPham: "GSC - FD - R",
         cauChi: giaNL("Cầu chì"), boLong: giaNL("Bulong Ø13"), loXo: giaNL("Lò xo"), satLucVat: 0,
-        giaTyMet: giaTyCotVanMet / 1.2,   // sheet FD tròn: V20 = H12/1.2
+        giaTyMet: giaTyCotVanMet / 1.2,   // sheet Price FD - Tron: ô V20 = H12/1.2
         haoHutVatTu: 0.1,
         heSoSanPhamThang: 75 * 26, heSoHoiVon: [1, 1.8, 2.5, 2.8, 3.2],
         heSoCanChinh: 1.1
@@ -182,53 +189,69 @@ const sanPham = [
         heSoSoVoiEI120: 0.75      // EI60 = ROUNDUP(EI120 × 0.75, -3)
     },
     {
-        // Trong Excel đây chỉ là ô chọn: lấy giá từ sheet FD.MFD.EI, sheet này lại chọn EI60 hoặc EI120 theo ô C2
+        // Trong Excel đây là mã chọn trên Price GSC: lấy giá từ sheet FD.MFD.EI (đang chọn GSC - MFD/Ei60 tại C2)
         maLoai: "FD.MFD.EI", hinhDang: "ei",
         tenLoai: "VAN CHỐNG CHÁY FD & MFD CHUẨN EI (chọn EI60 / EI120)", maSanPham: "GSC - FD&MFD/Ei",
-        chonEI: "GSC - MFD/Ei60"      // = ô FD.MFD.EI!C2 (đang chọn Ei60). Đổi thành "GSC - MFD/Ei120" nếu cần
+        chonEI: "GSC - MFD/Ei60"
     }
 ];
-const tim = (ma) => sanPham.find((s) => s.maSanPham === ma);
+
+const chuanHoaMa = (ma) => String(ma || "").trim();
+const tim = (ma) => sanPham.find((s) => s.maSanPham === chuanHoaMa(ma));
 
 // "Thu hồi vốn trên toàn sản phẩm trong tháng" = (vận hành xưởng + đầu tư máy/60 tháng + thưởng tháng 13/12)
-const thuHoiVonTrenToanSanPhamTrongThang = (chiPhiTongHop.soTienQuanLyVaVanHanhXuong1Thang + (chiPhiTongHop.tienĐauTuMayMoc / chiPhiTongHop.soThangHoiVonDauTuMayMoc) + chiPhiTongHop.tongThuongThang13 / 12);
+const thuHoiVonTrenToanSanPhamTrongThang =
+    chiPhiTongHop.soTienQuanLyVaVanHanhXuong1Thang +
+    chiPhiTongHop.tienĐauTuMayMoc / chiPhiTongHop.soThangHoiVonDauTuMayMoc +
+    chiPhiTongHop.tongThuongThang13 / 12;
 
-// ROUND(x,-3) và ROUNDUP(x,-3) kiểu Excel (Excel chỉ giữ 15 chữ số có nghĩa)
+// ROUND(x,-3) và ROUNDUP(x,-3) chuẩn 15 chữ số có nghĩa của Excel
 const lamSach = (x) => Number(x.toPrecision(15));
 const lamTronNghin = (x) => Math.sign(x) * Math.round(lamSach(Math.abs(x)) / 1000) * 1000;
 const lamTronLenNghin = (x) => Math.sign(x) * Math.ceil(lamSach(Math.abs(x)) / 1000) * 1000;
 
 // ------------------------------------------------------------------ VAN TRÒN (sheet "Price xxx - Tron", cột K)
-function giaVanTron(sp, duongKinh, chieuDai) {
+function giaVanTron(sp, duongKinh, chieuDai = Math.max(200, duongKinh)) {
+    const L = chieuDai || Math.max(200, duongKinh);
     const nhom = nhomKichThuoc(duongKinh);
     const doDayKhung = doDayKhungTronGoTay[duongKinh] || doDayKhungTron[nhom];
     const doDayLa = doDayLaTron[nhom];
 
-    const dienTichTon = (Math.PI * duongKinh * chieuDai) / 1e6;          // F: diện tích tôn thân (m2)
-    const dienTichLa = Math.PI * (duongKinh / 2 / 1000) ** 2;            // G: diện tích lá van (m2)
+    const dienTichTon = (Math.PI * duongKinh * L) / 1e6;                   // F: diện tích tôn thân (m2)
+    const dienTichLa = Math.PI * (duongKinh / 2 / 1000) ** 2;              // G: diện tích lá van (m2)
 
-    const tienTole = dienTichTon * giaTole(doDayKhung);                 // L
-    const tienTy = sp.giaTyMet * (duongKinh / 1000 + 0.1);               // N
-    const phuKien = sp.cauChi + sp.boLong + sp.loXo + sp.satLucVat;      // M, O, R, S
+    const tienTole = dienTichTon * giaTole(doDayKhung);                    // L
+    const tienTy = sp.giaTyMet * (duongKinh / 1000 + 0.1);                 // N
     // I: giá vốn vật tư (hao hụt lần 1)
-    const giaVonVatTu = (tienTole + sp.cauChi + tienTy + sp.boLong + sp.loXo + sp.satLucVat + dienTichLa * giaTole(doDayLa)) * (1 + sp.haoHutVatTu);
-    // thu hồi vốn: (chi phí cố định / sản lượng) × hệ số theo nhóm
+    const giaVonVatTu =
+        (tienTole + sp.cauChi + tienTy + sp.boLong + sp.loXo + sp.satLucVat + dienTichLa * giaTole(doDayLa)) *
+        (1 + sp.haoHutVatTu);
+    // Thu hồi vốn: (chi phí cố định / sản lượng) × hệ số theo nhóm
     const thuHoiVon = (thuHoiVonTrenToanSanPhamTrongThang / sp.heSoSanPhamThang) * sp.heSoHoiVon[nhom];
     const heSoPhu = duongKinh <= 200 ? chiPhiTongHop.heSoPhuVanTronNho : 1;
 
     // K: Excel nhân hao hụt lần 2 ở bước này: I*(1+J)
-    return lamTronNghin((giaVonVatTu * (1 + sp.haoHutVatTu) + thuHoiVon) * (1 + chiPhiTongHop.loiNhuanSanPham) * chiPhiTongHop.heSoSale * heSoPhu);
+    return lamTronNghin(
+        (giaVonVatTu * (1 + sp.haoHutVatTu) + thuHoiVon) *
+        (1 + chiPhiTongHop.loiNhuanSanPham) *
+        chiPhiTongHop.heSoSale *
+        heSoPhu
+    );
 }
 
 // ------------------------------------------------------------------ VAN VUÔNG (sheet "Price xxx - Vuong")
 function giaVanVuong(sp, rong, cao) {
     const iW = kichThuocVuong.indexOf(rong);
     const iH = kichThuocVuong.indexOf(cao);
-    if (iW < 0 || iH < 0) throw new RangeError("Kích thước " + rong + "x" + cao + " không có trong bảng giá van vuông. Hợp lệ: " + kichThuocVuong.join(", "));
+    if (iW < 0 || iH < 0) {
+        throw new RangeError(
+            "Kích thước " + rong + "x" + cao + " không có trong bảng giá van vuông. Hợp lệ: " + kichThuocVuong.join(", ")
+        );
+    }
     const canLon = Math.max(rong, cao);
-    const nhom = nhomKichThuoc(canLon);                                  // nhóm theo cạnh lớn nhất
+    const nhom = nhomKichThuoc(canLon);                                    // nhóm theo cạnh lớn nhất
 
-    const tienKhung = ((rong + cao) * 2 * chieuDaiVanVuong) / 1e6 * giaTole(doDayKhungVuong[nhom]);
+    const tienKhung = (((rong + cao) * 2 * chieuDaiVanVuong) / 1e6) * giaTole(doDayKhungVuong[nhom]);
     const tienTy = ((canLon + 50) / 1000) * giaTyCotVanMet;
     const tienLa = ((rong * cao) / 1e6) * giaTole(doDayLaVuong[nhom]);
     const giaVonVatTu = tienKhung + tienTy + tienLa + giaNL("Bulong Ø13") + sp.phuKien;
@@ -237,38 +260,85 @@ function giaVanVuong(sp, rong, cao) {
     // nhóm <=400 không nhân tỉ lệ, các nhóm còn lại nhân (cạnh lớn / 400)
     const thuHoiVon = donGiaThuHoi * (sp.heSoThuLaiVon[nhom] - sp.bangHeSo[iH][iW]) * (nhom === 0 ? 1 : canLon / 400);
 
-    return lamTronNghin(((giaVonVatTu * (1 + sp.haoHutVatTu) + thuHoiVon) * (1 + chiPhiTongHop.loiNhuanSanPham)) * chiPhiTongHop.heSoSale);
+    return lamTronNghin(
+        (giaVonVatTu * (1 + sp.haoHutVatTu) + thuHoiVon) *
+        (1 + chiPhiTongHop.loiNhuanSanPham) *
+        chiPhiTongHop.heSoSale
+    );
 }
 
-// ------------------------------------------------------------------ VAN EI120 (sheet "FD.MFD.EI120")
-function giaVanEI120(sp, rong, cao) {
+// ------------------------------------------------------------------ VAN EI120 & EI60 (sheet "FD.MFD.EI120" / "FD.MFD.EI60")
+// Sửa lỗi lệch tiêu đề trong Excel:
+// - B18 trên Price GSC và FD.MFD.EI60 ghi 750 nhưng FD.MFD.EI120!B18 gõ cứng là 760
+// - B33 và AF3 trên FD.MFD.EI60 ghi 1900 nhưng FD.MFD.EI120!B33 gõ cứng là 1600 và AF3 gõ cứng là 1500
+function chuanHoaKichThuocMaTranEI(rong, cao, theoBangMaTranEI = true) {
+    if (!theoBangMaTranEI) return { w: rong, h: cao };
+    const w = rong === 1900 ? 1500 : rong;
+    const h = cao === 750 ? 760 : cao === 1900 ? 1600 : cao;
+    return { w, h };
+}
+
+function tinhVatTuGocEI(spEI120, w, h) {
     const tole = giaNL("Tole 1.2mm EI"), fa10 = giaNL("KHS.FA.10 (10mm)"), hf20 = giaNL("KHS.HF.M20 (20mm)");
-    const chuVi = ((rong + cao + 40) * 2) / 1000;                        // chu vi cộng 40mm (m)
-    const dienTich = (cao * rong) / 1e6;                                 // m2
-    const L = sp.chieuDaiVan;
+    const chuVi = ((w + h + 40) * 2) / 1000;                               // chu vi cộng 40mm (m)
+    const dienTich = (h * w) / 1e6;                                        // m2
+    const L = spEI120.chieuDaiVan;
 
-    const khungTole = chuVi * (300 / 1000) * tole;                       // Vật tư khung tole
-    const khungChongChay = chuVi * ((L - 60) / 1000) * hf20 + chuVi * (L / 1000) * fa10 * 2; // Vật tư khung chống cháy
-    const laTole = dienTich * tole;                                      // Vật tư lá tole
-    const laChongChay = dienTich * hf20 + dienTich * fa10 * 2;           // Vật tư lá chống cháy
-    const vatTuPhu = giaNL("Vật tư phụ EI");
+    const khungTole = chuVi * (300 / 1000) * tole;                         // Q36: Vật tư khung tole
+    const khungChongChay = chuVi * ((L - 60) / 1000) * hf20 + chuVi * (L / 1000) * fa10 * 2; // Q38: Vật tư khung chống cháy
+    const laTole = dienTich * tole;                                        // Q37: Vật tư lá tole
+    const laChongChay = dienTich * hf20 + dienTich * fa10 * 2;             // Q39: Vật tư lá chống cháy
+    const vatTuPhu = giaNL("Vật tư phụ EI");                               // Q40: Vật tư phụ cố định
 
-    const vatTu = khungTole + khungChongChay + laTole + laChongChay + vatTuPhu;
-    // × (1+hao hụt 20%) × (1+chi phí SX 100%) × (1+lợi nhuận 30%) × (1+cân chỉnh -32%)
+    return khungTole + khungChongChay + laTole + laChongChay + vatTuPhu;
+}
+
+// Tính theo đúng Bảng Ma Trận D5:AF33 của FD.MFD.EI120 (ROUNDUP 1 lần ở cuối)
+function giaVanEI120(sp, rong, cao, theoBangMaTranEI = true) {
+    const { w, h } = chuanHoaKichThuocMaTranEI(rong, cao, theoBangMaTranEI);
+    const vatTu = tinhVatTuGocEI(sp, w, h);
     const heSo = (1 + sp.haoHutVatTu) * (1 + sp.chiPhiSanXuat) * (1 + sp.loiNhuan) * (1 + sp.canChinh);
     return lamTronLenNghin(vatTu * heSo);
 }
 
+// Tính theo Ô Nhập Liệu L37:M37 -> U36:U39 ở dưới sheet FD.MFD.EI (ROUNDUP 2 lần ở U37 và U38)
+function tínhGiáEITheoÔNhậpLiệu(rong, cao, maSanPham = "GSC - MFD/Ei120", soLuong = 1) {
+    const spEI120 = sanPham[9];
+    const vatTu = tinhVatTuGocEI(spEI120, rong, cao);
+    const giaThanhPhamU36 = vatTu * (1 + spEI120.chiPhiSanXuat) * (1 + spEI120.haoHutVatTu); // U36
+    const giaDuKienU37 = lamTronLenNghin(giaThanhPhamU36 * (1 + spEI120.loiNhuan));          // U37: ROUNDUP lần 1
+    const giaEI120_U38 = lamTronLenNghin(giaDuKienU37 * (1 + spEI120.canChinh));             // U38: ROUNDUP lần 2
+    const giaEI60_U39 = lamTronLenNghin(giaEI120_U38 * sanPham[10].heSoSoVoiEI120);          // U39: ROUNDUP(U38*0.75, -3)
+
+    const ma = chuanHoaMa(maSanPham);
+    const maThuc = ma === sanPham[11].maSanPham ? sanPham[11].chonEI : ma;
+    if (maThuc === sanPham[9].maSanPham) return giaEI120_U38 * soLuong;
+    if (maThuc === sanPham[10].maSanPham) return giaEI60_U39 * soLuong;
+    throw new Error("Mã EI không hợp lệ: " + maSanPham);
+}
+
 // ------------------------------------------------------------------ HÀM CHÍNH
-function tínhGiá(aIn, bIn, maSanPham, soLuong = 1) {
-    switch (maSanPham) {
+function tínhGiá(aIn, bIn, maSanPham, soLuong = 1, tuyChon = {}) {
+    const {
+        theoBangMaTranEI = true,     // true = khớp 100% ma trận Excel (gồm cả hàng B18=760, B33=1600, AF3=1500)
+        theoONhapLieuEI = false,     // true = khớp với ô tính nhanh U38/U39 ở cuối sheet FD.MFD.EI
+        chuaNhanCanChinhTron = false,// true = lấy giá cột K của 4 sheet ẩn van tròn (chưa nhân 1.1)
+        daoChieuRongCao = false      // true = truyền (Cao_HàngB, Rộng_CộtD) thay vì (Rộng_CộtD, Cao_HàngB)
+    } = tuyChon;
+
+    const ma = chuanHoaMa(maSanPham);
+    const rong = daoChieuRongCao ? bIn : aIn;
+    const cao  = daoChieuRongCao ? aIn : bIn;
+
+    switch (ma) {
         case sanPham[0].maSanPham:      // GSC - RVCD
         case sanPham[1].maSanPham:      // GSC - NRD-R
         case sanPham[2].maSanPham:      // GSC - FD - R
         case sanPham[3].maSanPham: {    // GSC - MFD&MFSD - R
-            const sp = tim(maSanPham);
+            const sp = tim(ma);
             const chieuDai = bIn || Math.max(200, aIn);                  // bảng sheet: Ø<=200 → L=200, còn lại L=Ø
             const giaSheet = giaVanTron(sp, aIn, chieuDai);
+            if (chuaNhanCanChinhTron) return giaSheet * soLuong;
             // Price GSC - Tron: ROUNDUP(giá sheet × hệ số cân chỉnh 1.1, -3)
             const gia = lamTronLenNghin(giaSheet * sp.heSoCanChinh);
             return gia * soLuong;
@@ -278,26 +348,33 @@ function tínhGiá(aIn, bIn, maSanPham, soLuong = 1) {
         case sanPham[6].maSanPham:      // GSC - PRD
         case sanPham[7].maSanPham:      // GSC - FD
         case sanPham[8].maSanPham: {    // GSC - MFD&MFSD
-            // Price GSC lấy nguyên giá ở sheet từng loại, không nhân thêm hệ số cân chỉnh
-            const gia = giaVanVuong(tim(maSanPham), aIn, bIn);
+            const gia = giaVanVuong(tim(ma), rong, cao);
             return gia * soLuong;
         }
         case sanPham[9].maSanPham: {    // GSC - MFD/Ei120
-            const gia = giaVanEI120(tim(maSanPham), aIn, bIn);
+            if (theoONhapLieuEI) return tínhGiáEITheoÔNhậpLiệu(rong, cao, ma, soLuong);
+            const gia = giaVanEI120(tim(ma), rong, cao, theoBangMaTranEI);
             return gia * soLuong;
         }
         case sanPham[10].maSanPham: {   // GSC - MFD/Ei60 = ROUNDUP(EI120 × 0.75, -3)
-            const gia = lamTronLenNghin(giaVanEI120(sanPham[9], aIn, bIn) * sanPham[10].heSoSoVoiEI120);
+            if (theoONhapLieuEI) return tínhGiáEITheoÔNhậpLiệu(rong, cao, ma, soLuong);
+            const gia = lamTronLenNghin(giaVanEI120(sanPham[9], rong, cao, theoBangMaTranEI) * sanPham[10].heSoSoVoiEI120);
             return gia * soLuong;
         }
         case sanPham[11].maSanPham: {   // GSC - FD&MFD/Ei → theo ô chọn của sheet FD.MFD.EI
-            return tínhGiá(aIn, bIn, sanPham[11].chonEI, soLuong);
+            return tínhGiá(aIn, bIn, sanPham[11].chonEI, soLuong, tuyChon);
         }
         default:
-            throw new Error("Mã sản phẩm không hợp lệ: " + maSanPham + ". Hợp lệ: " + sanPham.map((s) => s.maSanPham).join(" | "));
+            throw new Error(
+                "Mã sản phẩm không hợp lệ: " + maSanPham + ". Hợp lệ: " + sanPham.map((s) => s.maSanPham).join(" | ")
+            );
     }
 }
 
-if (typeof module !== "undefined") module.exports = { tínhGiá, sanPham, giaVanTron, tim };
-if (global) global.VanGioCalculator = { tínhGiá, sanPham, giaVanTron, tim };
+if (typeof module !== "undefined") {
+    module.exports = { tínhGiá, tínhGiáEITheoÔNhậpLiệu, sanPham, giaVanTron, giaVanVuong, giaVanEI120, tim };
+}
+if (global) {
+    global.VanGioCalculator = { tínhGiá, tínhGiáEITheoÔNhậpLiệu, sanPham, giaVanTron, giaVanVuong, giaVanEI120, tim };
+}
 })(typeof window !== "undefined" ? window : null);
